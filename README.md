@@ -1,7 +1,7 @@
 <h1 style="font-weight: bold;" align = "center">
- &nbsp;Data Analysis&nbsp;</h1>
+ &nbsp;Data Analysis - Data Science Using R and Python&nbsp;</h1>
 
-Hello World! 
+print("Hello World!") 
 
 Ini merupakan repository yang saya buat untuk menampung kode dan visualisasi dari project data analysis. 
 
