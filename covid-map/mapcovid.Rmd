@@ -1,0 +1,125 @@
+---
+title: "Maping Covid-19 Data"
+author: "Mely Santoso"
+date: "Last compiled on `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  rmdformats::downcute:
+    code_folding: show
+---
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+       message = FALSE,
+       warning = FALSE,
+       fig.align='center')
+```
+
+# Membuat peta sebaran kasus COVID-19 global dari data 3/6/2021
+
+Dokumen html ini merupakan dokumen untuk membuat visualisasi sebaran kasus terkonfirmasi dari Covid-19 secara global. Data yang diambil merupakan data dari hari Kamis 6 Juni 2021. 
+
+## Persiapan
+
+Sebelum membuat visualisasi, terdapat beberapa hal yang harus dilakukan seperti; mengatur lokasi working directory, me-load library R, mengunduh data kode negara, dan juga mengunduh data Covid-19. 
+
+### Mengatur working directory
+```{r}
+setwd("~/newmap")
+
+```
+
+### Load library yang digunakan 
+Beberapa library yang digunakan meliputi `leaflet`, `rgdal`, `RColorBrewer`, dan `Shiny`. 
+```{r}
+#load library 
+library(leaflet)
+library(rgdal)
+library(RColorBrewer)
+library(shiny)
+```
+
+
+### Download data kode negata dan data COVID-19
+Data file negara yang akan digunakan diunduh dari situs [Thematic Mapping](http://thematicmapping.org). File yang diunduh menganduk banyak jenis data border country. Agar data Covid-19 global bisa divisualisasikan sesuai negaranya, maka harus dicocokkan terlebih dahulu kode negara dari kedua data (data covid dan data geografi) Akan digunakan jenis ISO2 yang mengandung dua kode alfabet nama negara baik dari data WHO (untuk covid) maupun data negara. 
+```{r}
+download.file("http://thematicmapping.org/downloads/TM_WORLD_BORDERS_SIMPL-0.3.zip", destfile = "world_shape_file.zip")
+#system("unzip world_shape_file.zip")
+
+world_spdf <- readOGR(
+  dsn = getwd(),
+  layer="TM_WORLD_BORDERS_SIMPL-0.3",
+  verbose=FALSE
+)
+
+covidData <- read.csv("https://covid19.who.int/WHO-COVID-19-global-data.csv", 
+                      fileEncoding = "UTF-8-BOM",
+                      stringsAsFactors = FALSE)
+covidData <- na.omit(covidData)
+```
+
+Untuk membuat visualisasi dari data terbaru (hari), maka harus membuat variabel lain yang berisi data kumulatif kasus covid terbaru dari dataset yang telah diunduh. Karena dokumen ini dibuat pada tanggal 4, maka data terakhir yang didapatkan masih sampai pada tanggal 3 Juni 2021. 
+```{r}
+#select a certain date
+selectedData <- covidData[covidData$Date_reported == "2021-06-03", ]
+```
+
+Setelah itu, selanjutnya adalah menyesuaikan data negara dengan data covid. 
+```{r}
+#match cases and spatial data via ISO2/Country Code
+world_spdf$Cases <- selectedData$Cumulative_cases[match(world_spdf$ISO2, selectedData$Country_code)]
+
+#create label texts
+world_spdf@data$LabelText <- paste0(
+  "<b>Country:</b> ", world_spdf@data$NAME,"<br>", 
+  "<b>Cases:</b> ", format(world_spdf@data$Cases, nsmall=0, big.mark=","))
+
+```
+
+
+Langkah selanjutnya adalah tentang seni; bagaimana data itu diwarnai, disajikan dan bagaimana rentangannya. Proses ini bisa dilakukan lebih kreatif sesuka Anda. 
+```{r}
+#define colorpalette for chart legend
+paletteBins <- c(0, 50000, 100000, 500000, 1000000, 5000000, 10000000, 50000000)
+colorPalette <- colorBin(palette = "YlOrBr", domain = covidData$Cumulative_cases, na.color = "transparent", bins = paletteBins)
+```
+
+# Visualisasi circle map dari data kasus terkonfirmasi covid-19 per negara
+```{r}
+#create map with circle markers
+leaflet(world_spdf) %>% 
+  addTiles()  %>% 
+  setView(lat = 0, lng = 0, zoom=2) %>%
+  
+  addCircleMarkers(lng = ~LON,
+                   lat = ~LAT,
+                   radius = ~log(Cases) * 2,
+                   weight = 1,
+                   opacity = 1,
+                   color = ~ifelse(Cases > 0, "black", "transparent"),
+                   fillColor = ~ifelse(Cases > 0, colorPalette(Cases), "transparent"),
+                   fillOpacity = 0.8,
+                   label = ~lapply(LabelText, htmltools::HTML)) %>% 
+  
+  addLegend(pal = colorPalette, values = covidData$Cumulative_cases, opacity=0.9, title = "Cases", position = "bottomleft")
+```
+
+
+# Visualisasi choropleth map dari data kasus terkonfirmasi Covid-19 per negara 
+```{r}
+#create choropleth map
+leaflet(world_spdf) %>% 
+  addTiles()  %>% 
+  setView(lat = 0, lng = 0, zoom=2) %>%
+  
+  addPolygons( 
+    layerId = ~ISO2,
+    fillColor = ~colorPalette(Cases),
+    stroke = TRUE, 
+    fillOpacity = 1, 
+    color = "white", 
+    weight = 1,
+    label = ~lapply(LabelText, htmltools::HTML)) %>%
+  
+  addLegend(pal = colorPalette, values = covidData$Cumulative_cases, opacity=0.9, title = "Cases", position = "bottomleft")
+
+```
+
