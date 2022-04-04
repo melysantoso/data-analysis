@@ -1,0 +1,755 @@
+---
+title: "UIN Malang Internet User Analysis"
+subtitle: "Analisis Demografi Pengguna Internet pada Mahasiswa Baru UIN Malang dan Menentukan Resiko Adiksi Internet dengan Depresi, Anxiety, dan Stress"
+author: "Mely Santoso"
+date: "10/30/2020"
+output: 
+  html_document:
+    number_sections: true
+    toc: true
+    toc_float: true 
+    code_folding: "hide"
+    theme: journal
+    highlight: haddock
+---
+
+# **Pendahuluan (Tentang)**
+
+Saya berlatarbelakang lulusan jurusan psikologi dari UIN Malang. Kesibukan saya saat ini yang paling utama adalah salat 5 waktu dan mengajar mengaji
+
+Mari terhubung di twitter [himelysantoso](https://twitter.com/himelysantoso) atau instagram [melysantoso](https://www.instagram.com/melysantoso/) untuk mendiskusikan atau sekedar menyapa. 
+
+Jika Anda tertarik dengan tulisan berbasis data atau penjelasan berbasis sains, coba tengok tulisan-tulisan user story saya di [Kumparan](https://kumparan.com/melysantoso) (akhir-akhir ini meliput COVID-19). Atau tulisan lain saya yang membahas psikologi di [Medium](https://medium.com/@bukakurung)
+
+
+# **Persiapan Data (Merapikan, Eksplorasi, dan Membersihkan Data yang Tidak Dibutuhkan)**
+
+Data yang digunakan dalam analisis ini adalah data pribadi dari skripsi saya
+
+Data ini dikumpulkan dari mahasiswa baru tahun 2018 lalu
+
+Data yang dianalisis ini terdiri dari dua kategori utama yaitu 1) data demografi dan; 2) data psikologis
+
+Jika tertarik membaca skripsi saya silahkan kunjungi [Link ini](http://etheses.uin-malang.ac.id/13584/)
+
+***Catatan***
+
+* Untuk kepentingan kerahasiaan responden kita buang data yang bersifat privat seperti nama dan email
+* Variabel "Asal" tidak seberapa baik datanya jadi kita buang 
+* Untuk mempelajari membuat kategorisasi di R, kita buang variabel "Addicted"
+* Sebenarnya ada 1 variabel lain yaitu insomnia, tapi dalam laporan ini tidak digunakan karena hasil reliabilitas dan validitas skalanya tidak bagus
+
+
+```{r message = FALSE, warning = FALSE}
+
+#Import library()
+library(ggplot2)
+library(reshape2)
+library(tidyverse)
+library(dplyr)
+library(gridExtra)
+library(ggalluvial)
+library(treemapify)
+library(ggcorrplot)
+library(visreg)
+library(vcd)
+library(correlation)
+library(kableExtra)
+
+# 1) IMPORT & DATA CLEANING
+
+# a) Masukkan data 
+internetdata <- read.csv("datainternet.csv")
+#View(internetdata) #untuk melihat data 
+#glimpse(internetdata) #tidy up nama-nama variable
+#table(internetdata$Usia) #akses spesifik variabel
+
+# b) Buang observasi yang bersifat private dan tidak dibutuhkan 
+internetdata <- internetdata %>%
+  select(-c("Nama", "Email", "Asal", "Addicted")) 
+
+
+# c) Beberapa data dijadikan nominal 
+data_nominal <- (c("Sex", "Fakultas", "Pendidikan", "Device", "WiFi", 
+                   "Koneksi", "Alasan", "MedSos", "Lembur", "Layanan",
+                   "Situs", "Waktu", "Tempat"))
+internetdata[data_nominal] <- lapply(internetdata[data_nominal], function(x){factor(x)})
+
+# d) Obs Durasi dijadikan ordinal aja biar bisa dianalisis 
+internetdata$Durasi <- factor(internetdata$Durasi,
+                              ordered = T,
+                              levels = c("1- 3 Jam",
+                                         "4 - 7 Jam",
+                                         "> 7 Jam")) 
+
+
+# 2) OTHER DATA ISSUEs
+# Karena ini adalah data pengukuran psikologi maka ada beberapa hal yang harus dilakukan 
+
+#) a) Buat kategori kelompok adiksi dan non adiksi 
+internetdata$Kategori <- ifelse(internetdata$IA <= round(mean(internetdata$IA)), "nonadiksi", "adiksi")
+
+
+# Cek datanya
+glimpse(internetdata)
+
+```
+
+***Catatan***
+
+* Variabel "Kategori" didapat dari menghitung mean variabel "IA" (Internet Addiction) mean IA = 38 (detailed in 3.1)
+
+* Kita tidak melakukan analisis reliabilitas dan validitas karena skor di sini sudah final
+
+
+
+
+# **Visualisasi dan Analisa Data Demografi**
+
+Analisi demografi dimaksudkan untuk mengetahui gambaran besar tentang karakteristik responden dengan mencari kesamaan-kesamaan antara mereka 
+
+## Jenis Kelamin dan Fakultas Responden
+
+Data ini diambil dari mahasiswa baru UIN Malang tahun 2018 untuk itu kita membuat dulu visualisasi dasar untuk mengetahui kategorisasi dari jenis kelamin dan fakultas masing-masing responden 
+
+```{r}
+
+# a) Jenis Kelamin Responden
+jenis_kelamin <- internetdata %>%
+  ggplot(aes(x = Sex, fill = Sex)) +
+  geom_bar() +
+  labs(title = "Frekuensi Jenis Kelamin Responden", 
+       subtitle = "Karakteristik Jenis Kelamin Responden",
+       x = "Jenis Kelamin",
+       y = "Frekuensi") +
+  theme(legend.position = "none")
+
+# b) Fakultas Responden 
+fakultas <- internetdata %>%
+  ggplot(aes(x = Fakultas, fill = Fakultas)) +
+  geom_bar() +
+  labs(title = "Frekuensi Fakultas Responden",
+       subtitle = "Karakteristik Fakultas responden",
+       x = "Fakultas",
+       y = "Frekuensi") +
+  theme(legend.position = "none") 
+
+jenis_kelamin
+fakultas
+
+```
+
+***Catatan***
+
+* Sebaran responden menurut jenis kelamin adalah "Laki-laki" sebanyak 146 orang dan "Perempuan" 300 orang
+* Untuk sebaran fakultas: Ekonimi = 83 orang, FITK = 110 orang, Humaniora = 37 orang, Psikologi 87 orang, Saintek = 65 orang, dan Syariah = 64 orang
+
+
+## Menyederhanakan Variabel Jenis Kelamin dan Fakultas
+Dua visualisasi di atas dapat disederhanakan menjadi satu chart dengan cara mengisi chartnya dengan variabel lain
+
+```{r}
+
+# c) Menggabungkan variabel Sex dan Fakultas dalam satu chart (fill =) 
+internetdata %>%
+  ggplot(aes(x = Fakultas, fill = Sex)) +
+  geom_bar() +
+  labs(title = "Karakteristik Fakultas Responden",
+  subtitle = "Dipecah dari Jenis Kelamin",
+       y = "Frekuensi", 
+       x = "Fakultas")
+```
+
+***Catatan***
+
+* Alih-alih memisahkan dua kategori demografi Fakultas dan Sex, akan lebih sederhana jika disatukan dengan hasil yang sama 
+
+
+## Menggunakan Facet Wrap untuk Menjabarkan Data
+
+Kita juga dapat membuat visualisasi dengan facet_wrap untuk melihat lebih detail bagaimana karakteristik jenis kelamin dan fakultas dipecah menggunakan data koneksi 
+```{r}
+# d) Mem-facet_wrap menggunakan variabel Koneksi
+internetdata %>%
+  ggplot(aes(x = Koneksi, fill = Sex)) +
+  theme_bw() +
+  facet_wrap(~ Fakultas) +
+  geom_bar() +
+  labs(title = "Frekuensi Pengguna Paket Data dan WiFi",
+       subtitle = "dari Masing-Masing Fakultas Menurut Jenis Kelamin",
+       x = "Fakultas", 
+       y = "Frekuensi")
+
+
+```
+
+***Catatan***
+
+* Kita tidak bisa mentah-mentah menginterpretasikan data ini (i.e, pengguna paket data terbanyak dari FITK) karena jumlah responden per Fakultas yang tidak proporsional
+
+
+## Media Sosial Apa yang Paling Sering Digunakan oleh Mayoritas Responden?
+
+Variabel MedSos menanyakan tentang jenis media sosial yang paling sering digunakan oleh responden. 
+
+* Peneliti menyediakan beberapa jawaban media sosial serta menyertakan kolom kosong untuk diisi responden
+
+```{r}
+treemap_medsos <- internetdata %>% count(MedSos)
+#View(treemap_medsos) # untuk melihat lebih detail tentang data 
+
+treemap_medsos %>% 
+  ggplot(aes(fill = MedSos,
+             area = n,
+             label = MedSos)) +
+  geom_treemap() +
+  geom_treemap_text(colour = "white",
+                    place = "centre") +
+  labs("Media Sosial yang Sering Digunkan") +
+  theme(legend.position = "none")
+
+```
+
+***Catatan***
+
+* Visualisasi di atas menunjukkan bahwa mayoritas responden mengaku lebih sering menggunakan media sosial WhatsApp (223 orang)
+* Mayoritas responden (166 orang) mengaku lebih sering menggunakan media sosial Instagram
+
+
+
+## Alasan Apa yang Mendasari Responden Mengakses Internet? 
+
+Variabel Alasan mencoba untuk mengetahui alasan di balik akses internet para responden. Hal ini memungkinkan untuk 
+* Peneliti telah menyediakan 4 jawaban untuk dipilih responden 
+
+```{r}
+treemap_alasan <- internetdata %>% count(Alasan)
+  
+treemap_alasan %>% ggplot(aes(fill = Alasan, 
+                            area = n,
+                            label = Alasan)) +
+  geom_treemap() +
+  geom_treemap_text(colour = "white",
+                    place = "centre") +
+  labs("Alasan Penggunaan Internet") +
+  theme(legend.position = "none")
+  
+```
+
+***Catatan***
+
+* Visualisasi treemap di atas menunjukkan bahwa mayoritas responden cenderung menggunakan internet karena terkait tugas kuliah dan mengisi waktu luang 
+
+## Bagaimana tentang usia responden?
+```{r}
+
+internetdata %>% ggplot(aes(x = Usia)) +
+  geom_histogram(binwidth = 1,  fill = "deepskyblue3") + 
+  labs(y = "Jumlah Responden", 
+       x = "Usia (binwidth = 1)",
+       title = "Internet Addiction Responden Age Distribution")
+
+```
+
+***Catatan***
+
+* Mayoritas responden berada pada usia 18 tahun (260 orang) 
+* Hanya 5 orang yang berusia 21 tahun dan 1 orang berusia 22 tahun
+
+
+\
+
+
+# **Visualisasi dan Analisa Variabel Kategori Adiksi**
+
+Menggunakan skor dari variabel internet addiction, kita membuat dua kategori. Kategori pertama adalah mereka yang masuk dalam kategori adiksi, sedang kategori kedua termasuk dalam kategori non adiksi. 
+
+Pada bagian 1.1 telah disinggung bahwa penentuan kategori ini dilakukan dengan prosedur jika skor IA <= mean (38), responden termasuk kategori nonadiksi. Sedangkan jika skor IA > mean(38), responden akan tergolong kategori adiksi.
+
+Guna dari kategori ini nanti akan dianalisa lebih lanjut apakah terdapat perbandingan antara kelompok adiksi dengan nonadiksi pada skor variable depresi, anxiety, dan stres (lihat bagian 4)
+
+## Membuat visualisasi dari variabel "Kategori"
+```{r}
+
+kategori <- internetdata %>% 
+  ggplot(aes(x = Kategori, 
+             fill = Kategori)) +
+  geom_bar() +
+  labs(title = "Responden dengan Kategori Adiksi dan Nonadiksi",
+       x = "Kategori", 
+       y = "Frekuensi") +
+  theme(legend.position = "none")
+
+kategori
+
+prop.table(table(internetdata$Kategori))
+
+```
+
+***Catatan***
+
+* Sebanyak 202 orang (49 persen) termasuk dalam kategori adiksi sedangkan 244 orang lainnya (51 persen) berada dalam kategori nonadiksi
+
+* Untuk mengingatkan bahwa variabel kategori diambil dari angka mean variabel IA
+
+## Kategori Kecanduan Berdasarkan Jenis Kelamin dan Usia
+Pada bagian ini kita akan membandingkan frekuensi jenis kelamin dan usia dalam kategori adiksi dan nonadiksi
+```{r}
+
+kategori_sex <- internetdata %>% 
+  ggplot(aes(x = Sex, fill = Kategori)) +
+  theme_bw() + 
+  geom_bar() + 
+  labs(y = "Frekuensi Responden", 
+       title = "Frekuensi Kategori dari Gender")
+
+kategori_usia <- internetdata %>% 
+  ggplot(aes(x = Usia, fill = Kategori)) +
+  theme_bw() +
+  geom_bar() +
+  labs(y = "Frekuensi Responden", 
+       title = "Frekuensi Kategori dari Usia")
+
+
+kategori_sex
+kategori_usia
+
+
+```
+
+***Catatan*** 
+
+* Dari jenis kelamin laki-laki 84 orang termasuk dalam kategori adiksi dan 62 orang termasuk dalam kategori nonadiksi. Sedang untuk perempuan, sebanyak 134 orang termasuk dalam kategori adiksi dan 166 orang termasuk dalam kategori nonadiksi 
+
+
+## Facet-Wrap Koneksi dari Jenis Kelamin Diisi dengan Variabel "Kategori"
+
+Dalam bagian ini, saya mencoba membandingkan antara frekuensi dari variabel jenis kelamin dalam kategori adiksi dan nonadiksi dilihat pada jenis tipe koneksi (WiFi/Paket Data) yang digunakan
+```{r}
+
+internetdata %>% 
+  ggplot(aes(x = Sex, fill = Kategori)) +
+  theme_bw() +
+  facet_wrap(~ Koneksi) +
+  geom_bar() + 
+  labs(y = "Frekuensi Responden", 
+       title = "Variabel Jenis Kelamin dari Koneksi yang Digunakan")
+
+
+```
+
+
+
+## Menghubungkan variabel kategori, jenis kelamin dan koneksi
+Bagian ini mencoba untuk menunjukkan keterkaitan antara beberapa variabel bertipe factor untuk dilihat alur keterkaitannya 
+```{r}
+
+internetall <- internetdata %>%
+  group_by(Kategori, Sex, Koneksi) %>%
+  count()
+
+konekallu <- ggplot(internetall, 
+       aes(axis1 = Koneksi,
+           axis2 = Kategori,
+           y = n)) +
+  geom_alluvium(aes(fill = Sex)) +
+  geom_stratum() +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Koneksi", "Kategori"),
+                   expand = c(.1, .1)) +
+  labs(title = "Internet Data",
+       subtitle = "stratified by koneksi, sex, and kategori",
+       y = "Frequency") +
+  theme_minimal()
+
+
+
+durasiAllu <- internetdata %>%
+  group_by(Durasi, Sex, Kategori) %>%
+  count()
+
+duraAlu <- ggplot(durasiAllu, 
+       aes(axis1 = Durasi,
+           axis2 = Kategori,
+           y = n)) +
+  geom_alluvium(aes(fill = Sex)) +
+  geom_stratum() +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Durasi", "Kategori"),
+                   expand = c(.1, .1)) +
+  labs(title = "Internet Data",
+       subtitle = "stratified by durasi, sex, and kategori",
+       y = "Frequency") +
+  theme_minimal()
+
+
+konekallu
+duraAlu
+
+```
+
+
+
+## Membuat diagram alluvial menggunakan 4 variabel
+Bagian ini sejatinya sama dengan bagian sebelumnya, hanya di sini kita menggunakan axis yang lebih banyak untuk melihat keterkaita antar variabel factor yang dipilih 
+
+```{r}
+
+internetall2 <- internetdata %>% 
+  group_by(Kategori, Sex, Koneksi, Fakultas) %>%
+  count()
+
+ggplot(internetall2, 
+       aes(axis1 = Kategori,
+           axis2 = Koneksi,
+           axis3 = Fakultas,
+           y = n)) +
+  geom_alluvium(aes(fill = Sex)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", 
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Kategori", "Koneksi", "Fakultas"),
+                   expand = c(.1, .1)) +
+  scale_fill_viridis_d() +
+  labs(title = "Internet Data",
+       subtitle = "stratified by addicting category, koneksi, dan layanan",
+       y = "Frequency",
+       x = "Demographic") +
+  theme_minimal() 
+
+```
+
+
+## Melihat gambaran demografi Kategori, Jenis Kelamin, dan Koneksi
+
+```{r}
+
+jj <- xtabs(~Kategori + Sex + Koneksi, internetdata)
+
+# mosaic(jj, main = "Internet Data") #ini memunculkan layer dasar 
+
+mosaic(jj, 
+       shade = T,
+       legend = T,
+       labeling_args = list(set_vernames = c(Sex = "Gender",
+                                             Kategori = "Kategori Adiksi",
+                                             Koneksi = "Tipe Koneksi")),
+       set_labels = list(Kategori = c("Yes", "No"),
+                         Sex = c("Pria", "Wanita"),
+                         Koneksi = c("Data", "Wifi")),
+       main = "Internet Data")
+
+
+```
+
+
+
+# **Analisis Statistik dari Variabel IA, Depresi, Anxiety, dan Stress**
+
+* SPOLER ALERT! Bagian ini akan ada banyak sekali angka, tetapi tenang saja. Terdapat visualisasi dan juga rangkuman dari angka-angka yang menyilaukan tersebut. 
+
+Setelah dirasa cukup dengan data demografi, data dari variabel skala psikologi juga harus dianalisis
+
+Penelitian ini menggunakan dua skala alat ukur: IAT (Internet Addiction Test) untuk mengukur kecanduan internet yang dikembangkan oleh Young. Sedangkan untuk mengukur depresi, anxiety, dan stress, digunakan skala DASS-42 (Depression, Anxiety, and Stress Scale 42 item) terjemah bahasa Indonesia.
+
+
+## Summary korelasi 4 variabel psikologis
+
+Uji Statistik yang pertama dilakukan adalah dengan menemukan angka korelasi dari empat variabel psikologis: Internet addiction, depresi, anxiety, dan stress 
+
+```{r}
+#Menggunakan 
+#library(correlation)
+
+newdata <- select(internetdata, IA, Depresi, Anxiety, Stress)
+correlation::correlation(newdata, include_factors = T, method = "auto")
+
+```
+
+***Catatan***
+
+Dari tabel di atas menunjukkan bahwa angka korelasi variabel internet addiction dengan variabel depresi, anxiety dan stress termasuk dalam kategori kecil (0.36 p < 0.05, 0.44 p < 0.05, dan 0.48 p < 0.05 berturut-turut)
+
+Variabel depresei, anxiety, dan stress memiliki angka korelasi yang cukup tinggi (dep ~ anx = 0.72 p < 0.05, dep ~ str = 0.71 p < 0.05, anx = str = 0.79 p < 0.05)  
+
+
+## Membuat tabel angka korelasi dari 4 variabel skala psikologis
+
+Selanjutnya, angka korelasi yang telah kita dapat, akan kita visualkan menggunakan diagram tangga untuk mempermudah mengetahui detail nomornya
+
+```{r}
+
+intr <- dplyr::select_if(newdata, is.numeric)
+r <- cor(intr, use="complete.obs")
+rr <- ggcorrplot(r) #Visual diagram kotak 
+
+rr
+ggcorrplot(r, 
+           hc.order = T,
+           type = "lower",
+           lab = T) #Visual diagram tangga  
+
+```
+
+
+## Membuat point chart korelasi dari variabel internet adiksi dan depresi, anxiety, dan stress dibedakan dari jenis kelamin
+
+Guna mengetahui trend dari korelasi internet addiction dengan depresi, anxiety, dan stres, kita akan menggunakan visualisasi point char dengan line = linear regression model sebagai penentu trend. 
+
+```{r messege=FALSE, warning=FALSE}
+
+#Internet Addiction ~ Depression 
+ia_depres <- ggplot(data = internetdata, 
+                    aes(x = IA, 
+                        y = Depresi,
+                        color = Sex)) +
+  geom_point(alpha = .7,
+             size = 3) +
+  geom_smooth(method = "lm", 
+              se = FALSE,
+              size = 1.5,
+              col = "black") +
+  labs(y = "Depresi",
+       x = "Internet Addiction", 
+       title = "Korelasi Internet Addiction & Depresi") 
+ia_depres
+
+#Internet Addiction ~ Anxiety
+ia_anxiety <- ggplot(data = internetdata, 
+                    aes(x = IA, 
+                        y = Anxiety,
+                        color = Sex)) +
+  geom_point(alpha = .7,
+             size = 3) +
+  geom_smooth(method = "lm", 
+              se = FALSE,
+              size = 1.5,
+              col = "black") +
+  labs(y = "Anxiety",
+       x = "Internet Addiction", 
+       title = "Korelasi Internet Addiction & Anxiety") 
+ia_anxiety
+
+#Internet Addiction ~ Stress 
+ia_stress <- ggplot(data = internetdata, 
+                    aes(x = IA, 
+                        y = Stress,
+                        color = Sex)) +
+  geom_point(alpha = .7,
+             size = 3) +
+  geom_smooth(method = "lm", 
+              se = FALSE,
+              size = 1.5,
+              col = "black") +
+  labs(y = "Stress",
+       x = "Internet Addiction", 
+       title = "Korelasi Internet Addiction & Stress") 
+ia_stress
+
+
+```
+
+## Korelasi menggunakan chord diagram
+
+Kita juga dapat menggunakan chord diagram untuk membuat visualisasi korelasi dari variabel interenet addiction, depresi, anxiety, dan juga stress. 
+
+```{r message=FALSE, warning=FALSE}
+#Making matrix correlation 
+library(circlize)
+rdat <- select(internetdata, IA, Depresi, Anxiety, Stress)
+
+cordat <- cor(rdat)
+round(cordat, 2)
+
+
+grid.col <- c(IA = "#283655", Depresi = "#ff6f69", Anxiety = "#ffcc5c", Stress = "#88d8b0" )
+chordDiagram(round(cordat, 2), grid.col = grid.col)
+
+#circos.clear() 
+
+```
+
+Atau dengan chord diagram interaktif
+
+```{r messege=FALSE, warning=FALSE}
+
+#Menggunakan library(chorddiag)
+library(chorddiag)
+intcordiacho <- chorddiag(round(cordat, 2))
+intcordiacho
+
+```
+
+## Uji MANOVA menggunakan kategori IA sebagai variabel independent
+
+Pada penelitian ini, interent addiction merupakan variabel bebas (independent variable) sedangkan depresi, anxiety, dan stres merupakan variabel terikat (dependent variabel).
+
+Uji statistik selanjutnya adalah menggunakan metode multivariate analysis of variance (MANOVA). Hal ini memungkinkan kita menguji variabel independen kategorial IA (adiksi dan nonadiksi) dengan variabel dependent (depresi, anxiety, dan stress) untuk mengetahui apakah terdapat perbedaan yang nyata pada kategori IA terhadap 3 variabel dependent
+
+
+```{r}
+# Prepare and Explore Data untuk Manova
+
+manova_kat <- select(internetdata, Depresi, Anxiety, Stress, Kategori)
+manova_kat$Kategori <- factor(manova_kat$Kategori, levels = c("adiksi", "nonadiksi"))
+
+#Pake library(rehsape2) untuk melt()
+katmelt <- melt(manova_kat, id = c("Kategori"), measured = c("Depresi", "Anxiety", "Stress"))
+names(katmelt) <- c("Kategori", "Outcome_Measure", "Frequency")
+
+katmeltboxp <- katmelt %>%
+  ggplot(aes(Kategori, Frequency, col = Outcome_Measure)) +
+  geom_boxplot() +
+  labs(x = "Kategori Adiksi",
+       y = "Jumlah Skor Depresi/Anxiety/Stress",
+       color = "Outcome_Measure") +
+       scale_y_continuous(breaks = seq(0, 60, by = 2))
+
+katmeltboxp
+
+```
+
+
+## Analisis Manova
+
+Karena ini uji statistik, maka harus dibuat asumsi atau hipotesis dasarnya dulu
+
+Ho = Variabel depresi, anxiety, dan stres secara bersama-sama tidak menunjukkan perbedaan nyata pada kategori "adiksi" dan "noadiksi" -atau bisa dikatakan, skor mean depresi, anxiety, dan stres sama pada kategori adiksi dan nonadiksi
+
+Ha = Variabel depresi, anxiety, dan stres secara bersama-sama menunjukkan perbedaan nyata pada kategori "adiksi" dan "nonadiksi" -bisa juga dikatakan, skor mean depresi, anxiety, dan stres berbeda pada kategori adiksi dan nonadiksi
+```{r}
+
+manoutcome <- cbind(manova_kat$Depresi, manova_kat$Anxiety, manova_kat$Stress)
+adiksiModel <- manova(manoutcome ~ Kategori, data = manova_kat)
+summary(adiksiModel, intercept = TRUE)
+summary(adiksiModel, intercept=TRUE, test="Wilks") 
+summary(adiksiModel, intercept=TRUE, test="Hotelling")
+summary(adiksiModel, intercept=TRUE, test="Roy")
+
+```
+
+***Catatan*** 
+
+* Tes dilakukan menggunakan prosedur Pillai (0.15), Wilks (0.85), Hotelling (0.18), dan Roy (0.18). Semua prosedur menunjukkan angka signifikansi < 0.05 (note: 2.2e-16 = 0.00000000000000022, dengan 15 nol setelah titik)
+
+* Dengan demikian maka Ho ditolak = Variabel depresi, anxiety, dan stres secara bersama-sama menunjukkan tingkat perbedaan yang nyata pada kategori adiksi (Mungkin saja responden dengan kategori adiksi internet lebih mungkin mengalami depresi, anxiety, dan stress, dibandingkan mereka yang berada dalam kategori nonadiksi)
+
+
+## Follow-up analysis: univariate test statistics
+```{r}
+#Simply dengan memanggil 
+summary.aov(adiksiModel)
+```
+***Catatan***
+
+* Tabel berlabel Respon 1 untuk variabel Depresi, Respon 2 untuk variabel Anxiety, dan Respon 3 untuk variabel Stress.
+
+* Perhatikan bahwa nilai F dan nilai p dari analisis follow-up MANOVA ini identik dengan yang diperoleh jika dilakukan analisa one-way ANOVA pada setiap variabel dependen.
+
+* Nilai p menunjukkan bahwa terdapat perbedaan yang signifikan antara kategori adiksi dan nonadiksi dalam hal depresi, anxiety, dan stress (p < .05) 
+
+## Eksplorasi data untuk melakukan t-test
+
+Persiapan dan eksplorasi Data (means) depresi, anxiety, dan stress masing-masing jenis kelamin responden yang termasuk dalam kategori adiksi internet
+```{r message = FALSE, warning = FALSE}
+
+#Persiapan dan eksplorasi data 
+#Membuat data khusus untuk uji t 
+
+tadiksites <- select(internetdata, Sex, IA, Depresi, Anxiety, Stress, Kategori) #newdata
+tadiksites$Kategori <- factor(tadiksites$Kategori, levels = c("nonadiksi", "adiksi"))
+str(tadiksites)
+
+
+dd <- filter(tadiksites, Kategori == "adiksi")
+
+#cek nilai rata-rata antara jenis kelamin dalam kategori adiksi  pada variabel depresi, anxiety, dan stress 
+
+meanSexDep <- group_by(dd, Sex) %>%
+  summarize(
+    count = n(),
+    mean = round(mean(Depresi, na.rm = TRUE), 2),
+    sd = round(sd(Depresi, na.rm = TRUE), 2)
+  )
+kbl(meanSexDep, caption = "Perbandingan mean jenis kelamin dalam kategori adiksi pada varibale depresi") %>%
+   kable_styling(bootstrap_options = "striped", position = "left")
+
+meanSexAnx <- group_by(dd, Sex) %>%
+  summarize(
+    count = n(),
+    mean = round(mean(Anxiety, na.rm = TRUE),  2),
+    sd = round(sd(Anxiety, na.rm = TRUE), 2)
+  )
+kbl(meanSexAnx, caption = "Perbandingan mean jenis kelamin dalam kategori adiksi pada varibale anxiety") %>%
+  kable_styling(bootstrap_options = "striped", position = "left")
+
+
+meanSexStr <- group_by(dd, Sex) %>%
+  summarize(
+    count = n(),
+    mean = round(mean(Stress, na.rm = TRUE), 2),
+    sd = round(sd(Stress, na.rm = TRUE), 2)
+  )
+kbl(meanSexStr, caption = "Perbandingan mean jenis kelamin dalam kategori adiksi pada varibale stress") %>%
+  kable_styling(bootstrap_options = "striped", position = "left")
+
+
+```
+
+***Catatan***
+Dari analisis di atas menunjukkan bahwa terdapat perbedaan nilai rata-rata antara laki-laki dan perempuan dalam kategori adiksi internet dalam skor depresi, anxiety, dan stres. Namun, apakah perbedaan ini signifikan? Maka dari itu harus dilakukan t-test (dalam hal ini two independent atau unpaired t-test)
+
+
+## t-test untuk membandingkan mean jenis kelamin dalam kategori adiksi pada variabel psikologis
+
+Setelah mengetahui bahwa terdapat perbedaan mean (nilai rata-rata) antara jenis kelamin laki-laki dan perempuan dalam kategori adiksi pada variabel depresi, anxiety, dan stress, selanjutnya dilakukan uji-t untuk mengetahui apakah perbedaan nilai rerata ini signifikan 
+```{r}
+
+#Uji t-test 
+t.test(Depresi ~ Sex, data = dd, var.equal = TRUE)
+t.test(Anxiety ~ Sex, data = dd, var.equal = TRUE)
+t.test(Stress ~ Sex, data = dd, var.equal = TRUE)
+
+
+#Visualisasinya
+ttespr <- select(dd, Sex, Depresi, Anxiety, Stress) 
+ttespr$Sex <- factor(ttespr$Sex, levels = c("Laki-laki", "Perempuan"))
+
+#Pake library(rehsape2) untuk melt()
+ttesprmelt <- melt(ttespr, id = c("Sex"), measured = c("Depresi", "Anxiety", "Stress"))
+names(ttesprmelt) <- c("Sex", "Outcome_Measure", "Frequency")
+
+ttesbxpl <- ttesprmelt %>%
+  ggplot(aes(Sex, Frequency, col = Outcome_Measure)) +
+  geom_boxplot() +
+  labs(x = "Sex dalam Kategori Adiksi",
+       y = "Jumlah Skor Depresi/Anxiety/Stress",
+       color = "Outcome_Measure") +
+  scale_y_continuous(breaks = seq(0, 60, by = 2))
+
+ttesbxpl
+
+```
+***Catatan***
+* Pada uji-t di atas, kita mengetahui bahwa nilai t dari variabel depresi = 0.10, anxiety = -1.146, dan stres = -1.24. 
+
+* Pada uji di atas juga ditemukan bahwa mean jenis kelamin dalam variabel depresi berbeda (laki-laki = 7.99, perempuan = 7.89). Begitu juga dalam variabel anxiety (laki-laki = 13.36, perempuan = 14.46) dan stres (laki-laki = 15.14, perempuan 16.5)
+
+* Namun, ditemukan juga bahwa perbedaan skor rata-rata ini tidak signifikan. Ketiga variabel (depresi, anxiety, dan stress) memiliki nilai p > 0.05 (p = 0.92, p = 0.25, dan p = 0.21 secara berturut-turut)
+
+Dengan demikian dapat kita katakan bahwa responden dalam kategori adiksi, tidak ada perbedaan antara laki-laki dan perempuan pada skor depresi, anxiety, dan juga stres. 
+
+Dari visualisasi boxplot juga menunjukkan bahwa pada masing-masing jenis kelamin, nilai rerata pada masing-masing variabel tidak menunjukkan perbedaan yang kontras. 
+
+## *Kesimpulan Uji Statistik*
+
+* Hasil analisis statistik korelasi di atas menunjukkan bahwa terdapat hubungan antara internet addiction dengan tiga variabel lainnya dalam penelitian ini (depresi, anxiety, dan stres). Hubungan internet addiction dengan depresi, kecemasan, dan stres  termasuk dalam kategori nilai atau skor hubungan yang cukup. Hal itu berarti bahwa responden dengan skor internet addiction yang tinggi akan diikuti dengan skor depresi, kecemasan, dan stres yang tinggi juga. Dengan kata lain, kemunculan internet addiction dapat diprediksi dengan kemunculan depresi, kecemasan, dan stres yang hadir setelah atau sebelum internet addiction. 
+
+* Hasil analisis MANOVA menunjukkan bahwa terdapat perbedaan nilai rerata pada kelompok yang termasuk dalam kategori adiksi dengan kelompok yang termasuk pada kategori nonadiksi pada empat variabel penelitian yaitu depresi, kecemasan, dan stres. Hal tersebut juga mungkin berarti bahwa pada kelompok adiksi lebih cenderung mengalami depresi, kecemasan, dan stres lebih berat atau dalam level yang lebih tinggi dibandingkan kelompok yang termasuk dalam kategori nonadiksi.
+
+* Hasil uji T menunjukkan bahwa tidak dapat terdapat perbedaan yang signifikan antara jenis kelamin laki-laki dan perempuan dalam kelompok adiksi pada tiga variabel penelitian lainnya (depresi, anxiety, dan stres). Hal ini juga mungkin berarti bahwa laki-laki dan perempuan yang mengalami adiksi tidak menunjukkan perbedaan pada depresi, anxiety, dan juga stres. 
+
+
+Terima Kasih 

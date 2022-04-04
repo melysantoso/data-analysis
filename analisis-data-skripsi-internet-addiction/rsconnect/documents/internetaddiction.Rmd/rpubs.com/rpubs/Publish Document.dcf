@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/685437/9bd885501620468cbdc9ea71bb0b3bee
+bundleId: https://api.rpubs.com/api/v1/document/685437/9bd885501620468cbdc9ea71bb0b3bee
+url: http://rpubs.com/melysantoso/685437/edit
+when: 1604398488.36798
